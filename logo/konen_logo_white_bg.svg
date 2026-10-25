@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="16 16 224 224" role="img" aria-labelledby="title desc">
+  <title id="title">Konen logo</title>
+  <desc id="desc">A human-centered star graph whose branches form the letter K, on a white background.</desc>
+  <path fill="#FFFFFF" d="M16 16h224v224H16z"/>
+  <g fill="none" stroke="#6165AD" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M72 128V49M72 128v79M72 128l112-79M72 128l112 79"/>
+  </g>
+  <g fill="#949BDD">
+    <circle cx="72" cy="49" r="13"/>
+    <circle cx="72" cy="207" r="13"/>
+    <circle cx="184" cy="49" r="13"/>
+    <circle cx="184" cy="207" r="13"/>
+  </g>
+  <circle cx="72" cy="128" r="24" fill="#D69D0D" stroke="#6165AD" stroke-width="8"/>
+</svg>

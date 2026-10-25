@@ -1,0 +1,45 @@
+[project]
+name = "konen"
+version = "0.1.0"
+description = "Human-centered star-graph orchestration of AI agents"
+readme = "README.md"
+authors = [
+    { name = "Theodore Papamarkou" }
+]
+requires-python = ">=3.13,<3.16"
+license = "MIT"
+license-files = ["LICENSE"]
+
+dependencies = [
+    "anthropic",
+    "google-genai>=2.18.1,<3.0.0",
+    "jsonschema",
+    "kimi-sdk",
+    "openai",
+    "prompt-toolkit",
+    "rich"
+]
+
+[project.scripts]
+konen = "konen.cli.main:main"
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+    "pytest",
+    "ruff"
+]
+docs = [
+    "myst-parser",
+    "sphinx"
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12"]
+build-backend = "uv_build"

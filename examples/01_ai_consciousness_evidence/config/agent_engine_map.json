@@ -1,0 +1,7 @@
+{
+  "version": "1.0",
+  "agent_engine_map": {
+    "philosopher": "claude_sonnet",
+    "ai_scientist": "gpt_luna"
+  }
+}
