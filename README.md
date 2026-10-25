@@ -30,12 +30,12 @@ To install the CLI in an isolated environment:
 uv tool install konen
 ```
 
-Run `konen` after installing it. For a source checkout and development setup, see [DEVELOPMENT.md](DEVELOPMENT.md).
+Run `konen` after installing it. For a source checkout and development setup, see [DEVELOPMENT.md](https://github.com/polyshape/konen/blob/main/DEVELOPMENT.md).
 
 ## Documentation
 
-Read the [documentation](https://github.com/polyshape/konen/blob/main/docs/index.md), starting with the [first walkthrough example](https://github.com/polyshape/konen/blob/main/docs/examples/ai-consciousness-evidence.md).
+Read the [documentation](https://polyshape.github.io/konen/), starting with the [first walkthrough example](https://polyshape.github.io/konen/examples/ai-consciousness-evidence.html).
 
 ## License
 
-Konen is distributed under the MIT License. See [LICENSE](LICENSE).
+Konen is distributed under the MIT License. See [LICENSE](https://github.com/polyshape/konen/blob/main/LICENSE).

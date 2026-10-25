@@ -23,6 +23,10 @@ dependencies = [
 [project.scripts]
 konen = "konen.cli.main:main"
 
+[project.urls]
+Source = "https://github.com/polyshape/konen"
+Documentation = "https://polyshape.github.io/konen/"
+
 [dependency-groups]
 dev = [
     "ipykernel",
