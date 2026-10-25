@@ -7,3 +7,4 @@ myst_enable_extensions = ["dollarmath"]
 exclude_patterns = ["_build"]
 
 html_logo = "../logo/konen_logo_transparent_bg.svg"
+html_static_path = ["_static"]
