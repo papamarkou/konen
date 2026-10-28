@@ -1,4 +1,4 @@
-# Example 1: evidence of AI consciousness
+# Evidence of AI consciousness
 
 ## Overview
 

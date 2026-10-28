@@ -8,5 +8,6 @@ Konen emphasizes human-directed deliberation. A user decides which agents partic
 :maxdepth: 2
 
 installation
+user-guide/index
 examples/index
 ```

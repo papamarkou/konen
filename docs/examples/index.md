@@ -4,6 +4,7 @@ Each example includes a runnable workspace under the repository's `examples/` di
 
 ```{toctree}
 :maxdepth: 1
+:numbered: 2
 
 ai-consciousness-evidence
 ```
