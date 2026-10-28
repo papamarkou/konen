@@ -150,6 +150,13 @@ def test_commands_for_group_missing() -> None:
     assert commands_for_group("analysis") == ()
 
 
+def test_context_selection_commands_in_files_help() -> None:
+    syntaxes = [spec.syntax for spec in commands_for_group("files")]
+
+    assert "/memory select [all|none|<filename> ...]" in syntaxes
+    assert "/scratchpad select-next [@none|@active|<agent_uid> ...]" in syntaxes
+
+
 def test_static_completions() -> None:
     completions = static_completions()
 

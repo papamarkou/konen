@@ -156,7 +156,7 @@ A mapping determines which engine an agent uses. The AI scientist is mapped to t
 
 ## Inspect the shared memory
 
-Memory files provide persistent, shared context. Konen reads all memory files on each turn but does not update them automatically. The human chooses what to save. Unlike the session's transcript history, these files remain in the workspace after the session ends.
+Memory files provide persistent, shared context. By default, Konen reads all memory files on each turn. The human can choose which memory files to include for each agent, including none. Konen does not update memory files automatically, the human chooses what to save. Unlike the session's transcript history, these files remain in the workspace after the session ends.
 
 To see the available memory files, enter:
 
@@ -269,7 +269,7 @@ Konen reports:
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-Both scratchpads initially contain only a heading. On each turn, Konen reads the active agent's scratchpad, providing context only to that agent. Scratchpads persist in the workspace but are not updated automatically; the human chooses what to save.
+Both scratchpads initially contain only a heading. By default, Konen reads only the active agent's scratchpad on each turn. The human can choose which scratchpads to include for the next turn, including none. Scratchpads persist in the workspace but are not updated automatically, the human chooses what to save.
 
 ## Begin the investigation
 

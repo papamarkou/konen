@@ -219,3 +219,91 @@ def test_cli_e2e_no_network(tmp_path, monkeypatch) -> None:
         "konen[bayesian-analyst]> ",
         "konen[bayesian-analyst]> ",
     ]
+
+
+def test_cli_selected_context_no_network(tmp_path, monkeypatch) -> None:
+    workspace = Workspace(tmp_path / "bayesian-decision-study")
+    workspace.initialize()
+    workspace.add_agent(
+        agent_uid="bayesian-analyst",
+        name="Bayesian analyst",
+        description="Evaluates uncertainty using Bayesian inference.",
+    )
+    workspace.add_agent(
+        agent_uid="decision-analyst",
+        name="Decision analyst",
+        description="Compares actions using expected utility.",
+    )
+    workspace.add_engine(
+        engine_uid="gpt-analysis",
+        model_family="gpt",
+        model_name="gpt-5.6-luna",
+    )
+    workspace.assign_engine("bayesian-analyst", "gpt-analysis")
+    workspace.append_to_memory("prior_notes.md", "Baseline prior is 0.40.\n")
+    workspace.append_to_memory("posterior_summary.md", "Posterior is 0.82.\n")
+    workspace.append_to_scratchpad("bayesian-analyst", "Check prior scales.\n")
+    workspace.append_to_scratchpad("decision-analyst", "Compare actions.\n")
+
+    engine = _FakeEngine(
+        model_family="gpt",
+        model_name="gpt-5.6-luna",
+        uid="gpt-analysis",
+    )
+
+    def build_fake_engine(
+        model_family: str,
+        model_name: str,
+        config: dict[str, Any] | None = None,
+        uid: str | None = None,
+    ) -> _FakeEngine:
+        return engine
+
+    monkeypatch.setattr(
+        EngineFactory,
+        "build",
+        staticmethod(build_fake_engine),
+    )
+    scripted_session = _ScriptedPromptSession(
+        [
+            "/agent select bayesian-analyst",
+            "/memory select posterior_summary.md",
+            "/scratchpad select-next decision-analyst",
+            "Compare the findings.",
+            "/context memory",
+            "/context scratchpad",
+            "/quit",
+        ]
+    )
+    monkeypatch.setattr(
+        app_module,
+        "PromptSession",
+        lambda **kwargs: scripted_session,
+    )
+
+    cli = CLISession.from_path(workspace.root_path)
+    buffer = StringIO()
+    cli.renderer = CLIRenderer(
+        Console(file=buffer, width=160, color_system=None, force_terminal=False)
+    )
+
+    cli.run()
+
+    interaction_round = cli.orchestrator.interaction_state.round
+    assert interaction_round is not None
+    assert interaction_round.memory_context == {
+        "memory/posterior_summary.md": "Posterior is 0.82.\n"
+    }
+    assert interaction_round.scratchpad_context == {
+        "scratchpad/decision-analyst.md": "Compare actions.\n"
+    }
+    assert cli.next_scratchpad_uids is None
+    assert len(engine.calls) == 1
+
+    output = buffer.getvalue()
+    assert "Memory context" in output
+    assert "memory/posterior_summary.md" in output
+    assert "Posterior is 0.82." in output
+    assert "Scratchpad context" in output
+    assert "scratchpad/decision-analyst.md" in output
+    assert "Compare actions." in output

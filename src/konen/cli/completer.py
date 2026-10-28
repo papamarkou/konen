@@ -142,11 +142,41 @@ class CLICompleter(Completer):
         }:
             return {filename: "memory file" for filename in files["memory"]}
 
+        if context[:2] == ["/memory", "select"]:
+            selected = set(context[2:])
+            if selected & {"all", "none"}:
+                return {}
+            candidates = {
+                filename: "memory file"
+                for filename in files["memory"]
+                if filename not in selected
+            }
+            if not selected:
+                candidates.update(
+                    {"all": "all memory files", "none": "no memory files"}
+                )
+            return candidates
+
         if tuple(context) in {
             ("/memory", "append"),
             ("/memory", "append-turn"),
         }:
             return {filename: "existing memory file" for filename in files["memory"]}
+
+        if context[:2] == ["/scratchpad", "select-next"]:
+            selected = set(context[2:])
+            if "@none" in selected:
+                return {}
+            candidates = {
+                agent_uid: "agent scratchpad"
+                for agent_uid in agent_uids
+                if agent_uid not in selected
+            }
+            if "@active" not in selected:
+                candidates["@active"] = "active agent scratchpad"
+            if not selected:
+                candidates["@none"] = "no scratchpads"
+            return candidates
 
         if context == ["/context"]:
             return {

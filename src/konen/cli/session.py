@@ -155,17 +155,7 @@ class CLISession(KonenCLI):
 
     def _run_turn(self, user_prompt: str) -> None:
         """Run a turn using the current history limit."""
-        if self.orchestrator.agent_uid is None:
-            raise ValueError(
-                "No active agent. Use /agent select <uid> before sending a prompt."
-            )
-
-        with self.renderer.console.status("Generating response..."):
-            response = self.orchestrator.run_turn(
-                user_prompt, history_limit=self.history_limit
-            )
-
-        self.renderer.show_response(orchestrator=self.orchestrator, response=response)
+        super()._run_turn(user_prompt, history_limit=self.history_limit)
 
     def _completer(self) -> Completer:
         """Return context-aware completion for the current session."""

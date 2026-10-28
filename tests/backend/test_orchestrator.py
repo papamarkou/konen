@@ -211,6 +211,80 @@ def test_orchestrator_first_turn(
     assert "Compare prior scales of 1 and 2" in call["system_instruction"]
 
 
+def test_orchestrator_selected_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    orchestrator = _orchestrator(tmp_path, monkeypatch)
+    orchestrator.workspace.append_to_memory(
+        "research/posterior_summary.md",
+        "The posterior probability is 0.82.\n",
+    )
+    engine = orchestrator.llm_pool.get_engine("gpt-analysis")
+    assert isinstance(engine, _FakeEngine)
+
+    orchestrator.run_turn(
+        "Compare the two findings.",
+        memory_filenames=("research/posterior_summary.md",),
+        scratchpad_agent_uids=("decision-analyst",),
+    )
+
+    interaction_round = orchestrator.interaction_state.round
+    assert interaction_round is not None
+    assert interaction_round.memory_context == {
+        "memory/research/posterior_summary.md": "The posterior probability is 0.82.\n"
+    }
+    assert interaction_round.scratchpad_context == {
+        "scratchpad/decision-analyst.md": (
+            "Compare expected utility under the baseline and sensitivity scenarios.\n"
+        )
+    }
+    system_instruction = engine.calls[0]["system_instruction"]
+    assert "The posterior probability is 0.82." in system_instruction
+    assert "Compare expected utility under the baseline" in system_instruction
+    assert "The baseline prior odds favor" not in system_instruction
+    assert "Compare prior scales of 1 and 2" not in system_instruction
+
+
+def test_orchestrator_empty_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    orchestrator = _orchestrator(tmp_path, monkeypatch)
+    engine = orchestrator.llm_pool.get_engine("gpt-analysis")
+    assert isinstance(engine, _FakeEngine)
+
+    orchestrator.run_turn(
+        "Assess the evidence without workspace notes.",
+        memory_filenames=(),
+        scratchpad_agent_uids=(),
+    )
+
+    interaction_round = orchestrator.interaction_state.round
+    assert interaction_round is not None
+    assert interaction_round.memory_context == {}
+    assert interaction_round.scratchpad_context == {}
+    system_instruction = engine.calls[0]["system_instruction"]
+    assert "## Memory context" not in system_instruction
+    assert "## Scratchpad context" not in system_instruction
+
+
+def test_orchestrator_selected_memory_removed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    orchestrator = _orchestrator(tmp_path, monkeypatch)
+    orchestrator.workspace.remove_memory_file("research/prior_notes.md")
+
+    with pytest.raises(FileNotFoundError, match="Memory file does not exist"):
+        orchestrator.run_turn(
+            "Reassess the prior.",
+            memory_filenames=("research/prior_notes.md",),
+        )
+
+    assert orchestrator.interaction_state.round is None
+
+
 def test_orchestrator_second_turn(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

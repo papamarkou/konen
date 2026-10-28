@@ -79,7 +79,11 @@ class Orchestrator:
         self.agent_uid = agent_uid
 
     def run_turn(
-        self, user_prompt: str, history_limit: int | None = None
+        self,
+        user_prompt: str,
+        history_limit: int | None = None,
+        memory_filenames: tuple[str, ...] | None = None,
+        scratchpad_agent_uids: tuple[str, ...] | None = None,
     ) -> str | None:
         """Run one user-agent interaction turn."""
         self.workspace.ensure_initialized()
@@ -158,8 +162,15 @@ class Orchestrator:
             provider_history_start_uid = None
 
         team_context = self.ai_team.to_context()
-        memory_context = self.workspace.load_memory_context()
-        scratchpad_context = self.workspace.load_scratchpad_context(agent_uid)
+        memory_context = self.workspace.load_memory_context(memory_filenames)
+        selected_scratchpads = (
+            (agent_uid,) if scratchpad_agent_uids is None else scratchpad_agent_uids
+        )
+        scratchpad_context: dict[str, str] = {}
+        for scratchpad_agent_uid in selected_scratchpads:
+            scratchpad_context.update(
+                self.workspace.load_scratchpad_context(scratchpad_agent_uid)
+            )
 
         self.interaction_state.start_round(
             agent_uid=agent_uid,
