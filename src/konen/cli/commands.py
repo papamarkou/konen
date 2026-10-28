@@ -138,6 +138,12 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
     ),
     CommandSpec(
         "files",
+        "/memory select [all|none|<filename> ...]",
+        "Show or set memory files included for the active agent's turns.",
+        "/memory select",
+    ),
+    CommandSpec(
+        "files",
         "/memory append <filename>",
         "Append interactively entered text to a memory file.",
         "/memory append",
@@ -168,6 +174,12 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         "/scratchpad show <agent_uid>",
         "View one agent scratchpad.",
         "/scratchpad show",
+    ),
+    CommandSpec(
+        "files",
+        "/scratchpad select-next [@none|@active|<agent_uid> ...]",
+        "Show or set scratchpads included in the next turn.",
+        "/scratchpad select-next",
     ),
     CommandSpec(
         "files",

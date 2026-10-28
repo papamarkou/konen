@@ -270,6 +270,37 @@ def test_cli_completer_memory_files(text: str) -> None:
     ]
 
 
+def test_cli_completer_memory_selection() -> None:
+    completer = _completer()
+
+    assert _texts(completer, "/memory select ") == [
+        "all",
+        "literature/robustness.md",
+        "none",
+        "prior_notes.md",
+    ]
+    assert _texts(completer, "/memory select prior_notes.md ") == [
+        "literature/robustness.md"
+    ]
+    assert _texts(completer, "/memory select none ") == []
+
+
+def test_cli_completer_scratchpad_selection() -> None:
+    completer = _completer()
+
+    assert _texts(completer, "/scratchpad select-next ") == [
+        "@active",
+        "@none",
+        "bayesian-analyst",
+        "decision-analyst",
+    ]
+    assert _texts(completer, "/scratchpad select-next @none ") == []
+    assert _texts(completer, "/scratchpad select-next decision-analyst ") == [
+        "@active",
+        "bayesian-analyst",
+    ]
+
+
 def test_cli_completer_context_sections() -> None:
     completer = _completer()
 

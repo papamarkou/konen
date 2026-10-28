@@ -91,11 +91,28 @@ class Workspace:
 
         return workspace_file.read_text(encoding="utf-8")
 
-    def load_memory_context(self) -> dict[str, str]:
+    def load_memory_context(
+        self, filenames: tuple[str, ...] | None = None
+    ) -> dict[str, str]:
         """Load memory context keyed by workspace-relative path."""
         self.ensure_initialized()
 
         memory_context: dict[str, str] = {}
+
+        if filenames is not None:
+            for filename in filenames:
+                path = self._resolve_memory_file_path(filename)
+                if not path.is_file():
+                    raise FileNotFoundError(
+                        f"Memory file does not exist: '{filename}'."
+                    )
+
+                workspace_relative_path = path.relative_to(self.root_path).as_posix()
+                memory_context[workspace_relative_path] = path.read_text(
+                    encoding="utf-8"
+                )
+
+            return memory_context
 
         for path in sorted(self.memory_path.rglob("*")):
             if not path.is_file():

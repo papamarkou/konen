@@ -110,6 +110,62 @@ def test_workspace_load_memory_context(tmp_path: Path) -> None:
     }
 
 
+def test_workspace_load_selected_memory_context(tmp_path: Path) -> None:
+    workspace = Workspace(tmp_path / "bayesian-sensitivity-study")
+    workspace.initialize()
+    (workspace.memory_path / "prior_notes.md").write_text(
+        "The baseline prior probability is 0.40.\n", encoding="utf-8"
+    )
+    (workspace.memory_path / "posterior_summary.md").write_text(
+        "The posterior probability is 0.82.\n", encoding="utf-8"
+    )
+
+    assert workspace.load_memory_context(("prior_notes.md",)) == {
+        "memory/prior_notes.md": "The baseline prior probability is 0.40.\n"
+    }
+    assert workspace.load_memory_context(()) == {}
+
+
+def test_workspace_load_memory_context_includes_new_files(tmp_path: Path) -> None:
+    workspace = Workspace(tmp_path / "bayesian-sensitivity-study")
+    workspace.initialize()
+    (workspace.memory_path / "prior_notes.md").write_text(
+        "The baseline prior probability is 0.40.\n", encoding="utf-8"
+    )
+
+    assert workspace.load_memory_context() == {
+        "memory/prior_notes.md": "The baseline prior probability is 0.40.\n"
+    }
+
+    (workspace.memory_path / "posterior_summary.md").write_text(
+        "The posterior probability is 0.82.\n", encoding="utf-8"
+    )
+
+    assert workspace.load_memory_context() == {
+        "memory/posterior_summary.md": "The posterior probability is 0.82.\n",
+        "memory/prior_notes.md": "The baseline prior probability is 0.40.\n",
+    }
+    assert workspace.load_memory_context(("prior_notes.md",)) == {
+        "memory/prior_notes.md": "The baseline prior probability is 0.40.\n"
+    }
+
+
+def test_workspace_load_selected_memory_missing_file(tmp_path: Path) -> None:
+    workspace = Workspace(tmp_path / "bayesian-sensitivity-study")
+    workspace.initialize()
+
+    with pytest.raises(FileNotFoundError, match="Memory file does not exist"):
+        workspace.load_memory_context(("prior_notes.md",))
+
+
+def test_workspace_load_selected_memory_invalid_path(tmp_path: Path) -> None:
+    workspace = Workspace(tmp_path / "bayesian-sensitivity-study")
+    workspace.initialize()
+
+    with pytest.raises(ValueError, match="path escapes memory directory"):
+        workspace.load_memory_context(("../outside.md",))
+
+
 def test_workspace_load_scratchpad_context(tmp_path: Path) -> None:
     workspace = Workspace(tmp_path / "bayesian-sensitivity-study")
     workspace.initialize()

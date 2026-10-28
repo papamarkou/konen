@@ -1,9 +1,10 @@
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from konen import AIAgent, AITeam, EngineRouter
+from konen import AIAgent, AITeam, EngineRouter, Workspace
 from konen.cli.completer import CLICompleter
 from konen.cli.session import CLISession
 
@@ -59,13 +60,27 @@ class _Orchestrator:
         self.interaction_state = _InteractionState()
         self.agent_uid = agent_uid
         self.calls: list[tuple[object, ...]] = []
+        self.fail_next_turn = False
 
     def run_turn(
         self,
         user_prompt: str,
         history_limit: int | None = None,
+        memory_filenames: tuple[str, ...] | None = None,
+        scratchpad_agent_uids: tuple[str, ...] | None = None,
     ) -> str:
-        self.calls.append(("run_turn", user_prompt, history_limit))
+        self.calls.append(
+            (
+                "run_turn",
+                user_prompt,
+                history_limit,
+                memory_filenames,
+                scratchpad_agent_uids,
+            )
+        )
+        if self.fail_next_turn:
+            self.fail_next_turn = False
+            raise RuntimeError("Generation failed.")
         return "The posterior probability remains above the decision threshold."
 
 
@@ -107,6 +122,8 @@ class _TestSession(CLISession):
         self.workspace = SimpleNamespace(name="bayesian-decision-study")
         self.orchestrator = _Orchestrator(agent_uid=agent_uid)
         self.renderer = _Renderer()
+        self.memory_selections: dict[str, tuple[str, ...] | None] = {}
+        self.next_scratchpad_uids: tuple[str, ...] | None = None
         self.history_limit: int | None = None
         self.confirm_answers: list[bool] = []
         self.confirm_messages: list[str] = []
@@ -116,6 +133,26 @@ class _TestSession(CLISession):
         if not self.confirm_answers:
             raise AssertionError("No confirmation answer was configured.")
         return self.confirm_answers.pop(0)
+
+
+def _session_with_workspace(tmp_path: Path) -> _TestSession:
+    session = _TestSession()
+    workspace = Workspace(tmp_path / "bayesian-decision-study")
+    workspace.initialize()
+    workspace.add_agent(
+        agent_uid="bayesian-analyst",
+        name="Bayesian analyst",
+        description="Evaluates uncertainty using Bayesian inference.",
+    )
+    workspace.add_agent(
+        agent_uid="decision-analyst",
+        name="Decision analyst",
+        description="Compares actions using expected utility.",
+    )
+    workspace.append_to_memory("prior_notes.md", "The baseline prior is 0.40.\n")
+    workspace.append_to_memory("posterior_summary.md", "The posterior is 0.82.\n")
+    session.workspace = workspace
+    return session
 
 
 def test_cli_session_history_limit_label() -> None:
@@ -292,6 +329,202 @@ def test_cli_session_agent_select_falls_back() -> None:
     ]
 
 
+def test_cli_session_memory_selection_per_agent(tmp_path: Path) -> None:
+    session = _session_with_workspace(tmp_path)
+
+    session._dispatch_command("/memory select")
+    assert session.renderer.calls[-1] == (
+        "info",
+        "Memory files for agent 'bayesian-analyst': all.",
+    )
+
+    session._dispatch_command("/memory select prior_notes.md")
+    session._dispatch_command("First question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "First question.",
+        None,
+        ("prior_notes.md",),
+        None,
+    )
+
+    session._dispatch_command("/agent select decision-analyst")
+    session._dispatch_command("Second question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Second question.",
+        None,
+        None,
+        None,
+    )
+
+    session._dispatch_command("/agent select bayesian-analyst")
+    session._dispatch_command("Third question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Third question.",
+        None,
+        ("prior_notes.md",),
+        None,
+    )
+
+    session._dispatch_command(
+        "/memory select posterior_summary.md prior_notes.md prior_notes.md"
+    )
+    session._dispatch_command("Fourth question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Fourth question.",
+        None,
+        ("posterior_summary.md", "prior_notes.md"),
+        None,
+    )
+
+
+def test_cli_session_memory_selection_none_and_all(tmp_path: Path) -> None:
+    session = _session_with_workspace(tmp_path)
+
+    session._dispatch_command("/memory select none")
+    session._dispatch_command("First question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "First question.",
+        None,
+        (),
+        None,
+    )
+
+    session._dispatch_command("/memory select all")
+    session._dispatch_command("Second question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Second question.",
+        None,
+        None,
+        None,
+    )
+
+
+def test_cli_session_memory_selection_invalid(tmp_path: Path) -> None:
+    session = _session_with_workspace(tmp_path)
+    session._dispatch_command("/memory select prior_notes.md")
+
+    with pytest.raises(FileNotFoundError, match="Memory file does not exist"):
+        session._dispatch_command("/memory select missing.md")
+    with pytest.raises(ValueError, match="path escapes memory directory"):
+        session._dispatch_command("/memory select ../outside.md")
+    with pytest.raises(ValueError, match="Use 'all' or 'none' alone"):
+        session._dispatch_command("/memory select all prior_notes.md")
+
+    assert session.memory_selections["bayesian-analyst"] == ("prior_notes.md",)
+
+
+def test_cli_session_scratchpad_selection(tmp_path: Path) -> None:
+    session = _session_with_workspace(tmp_path)
+
+    session._dispatch_command("/scratchpad select-next")
+    assert session.renderer.calls[-1] == (
+        "info",
+        "Scratchpads for next turn: bayesian-analyst (default).",
+    )
+
+    session._dispatch_command("/scratchpad select-next @none")
+    session._dispatch_command("First question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "First question.",
+        None,
+        None,
+        (),
+    )
+    assert session.next_scratchpad_uids is None
+
+    session._dispatch_command(
+        "/scratchpad select-next @active decision-analyst @active"
+    )
+    session._dispatch_command("Second question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Second question.",
+        None,
+        None,
+        ("bayesian-analyst", "decision-analyst"),
+    )
+
+    session._dispatch_command("/scratchpad select-next decision-analyst")
+    session._dispatch_command("Third question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Third question.",
+        None,
+        None,
+        ("decision-analyst",),
+    )
+
+
+def test_cli_session_scratchpad_selection_cleared_on_agent_switch(
+    tmp_path: Path,
+) -> None:
+    session = _session_with_workspace(tmp_path)
+    session._dispatch_command("/scratchpad select-next @none")
+
+    session._dispatch_command("/agent select decision-analyst")
+    session._dispatch_command("First question.")
+
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "First question.",
+        None,
+        None,
+        None,
+    )
+
+
+def test_cli_session_scratchpad_selection_retained_after_failure(
+    tmp_path: Path,
+) -> None:
+    session = _session_with_workspace(tmp_path)
+    session._dispatch_command("/scratchpad select-next decision-analyst")
+    session.orchestrator.fail_next_turn = True
+
+    with pytest.raises(RuntimeError, match="Generation failed"):
+        session._dispatch_command("First question.")
+
+    assert session.next_scratchpad_uids == ("decision-analyst",)
+
+    session._dispatch_command("Second question.")
+    assert session.orchestrator.calls[-1] == (
+        "run_turn",
+        "Second question.",
+        None,
+        None,
+        ("decision-analyst",),
+    )
+    assert session.next_scratchpad_uids is None
+
+
+def test_cli_session_scratchpad_selection_invalid(tmp_path: Path) -> None:
+    session = _session_with_workspace(tmp_path)
+    session._dispatch_command("/scratchpad select-next @active")
+
+    with pytest.raises(ValueError, match="Agent 'missing' does not exist"):
+        session._dispatch_command("/scratchpad select-next missing")
+    with pytest.raises(ValueError, match="Invalid agent UID"):
+        session._dispatch_command("/scratchpad select-next @invalid")
+    with pytest.raises(ValueError, match="Use '@none' alone"):
+        session._dispatch_command("/scratchpad select-next @none @active")
+
+    assert session.next_scratchpad_uids == ("bayesian-analyst",)
+
+
+@pytest.mark.parametrize("command", ["/memory select", "/scratchpad select-next"])
+def test_cli_session_context_selection_no_active_agent(command: str) -> None:
+    session = _TestSession(agent_uid=None)
+
+    with pytest.raises(ValueError, match="No active agent"):
+        session._dispatch_command(command)
+
+
 def test_cli_session_run_turn_history_limit() -> None:
     session = _TestSession()
     session.history_limit = 2
@@ -299,7 +532,7 @@ def test_cli_session_run_turn_history_limit() -> None:
 
     assert session._dispatch_command(prompt) is False
 
-    assert session.orchestrator.calls == [("run_turn", prompt, 2)]
+    assert session.orchestrator.calls == [("run_turn", prompt, 2, None, None)]
     assert session.renderer.console.status_messages == ["Generating response..."]
     assert session.renderer.calls == [
         (

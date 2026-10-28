@@ -30,6 +30,8 @@ class KonenCLI:
         self.orchestrator = orchestrator
         self.renderer = CLIRenderer() if renderer is None else renderer
         self.session: PromptSession[str] = PromptSession(history=InMemoryHistory())
+        self.memory_selections: dict[str, tuple[str, ...] | None] = {}
+        self.next_scratchpad_uids: tuple[str, ...] | None = None
 
     @classmethod
     def from_path(cls, root_path: str | Path = ".") -> "KonenCLI":
@@ -426,10 +428,11 @@ class KonenCLI:
         self.renderer.show_file(path, content)
 
     def _handle_memory(self, arguments: list[str]) -> None:
-        """Handle memory-file inspection and mutations."""
+        """Handle memory-file inspection, selection, and mutations."""
         if not arguments:
             raise ValueError(
                 "Usage: /memory list | /memory show <filename> | "
+                "/memory select [all|none|<filename> ...] | "
                 "/memory append <filename> | /memory append-turn <filename> | "
                 "/memory clear <filename> | /memory remove <filename>"
             )
@@ -448,6 +451,10 @@ class KonenCLI:
             path = f"{self.workspace.memory_dir_name}/{filename}"
             content = self.workspace.read_workspace_file(path)
             self.renderer.show_file(path, content)
+            return
+
+        if subcommand == "select":
+            self._select_memory(arguments[1:])
             return
 
         if subcommand == "append":
@@ -489,15 +496,44 @@ class KonenCLI:
 
         raise ValueError(
             "Usage: /memory list | /memory show <filename> | "
+            "/memory select [all|none|<filename> ...] | "
             "/memory append <filename> | /memory append-turn <filename> | "
             "/memory clear <filename> | /memory remove <filename>"
         )
 
+    def _select_memory(self, arguments: list[str]) -> None:
+        """Show or set the active agent's memory selection."""
+        agent_uid = self._require_active_agent()
+
+        if arguments:
+            if arguments == ["all"]:
+                self.memory_selections[agent_uid] = None
+            elif arguments == ["none"]:
+                self.memory_selections[agent_uid] = ()
+            else:
+                if "all" in arguments or "none" in arguments:
+                    raise ValueError(
+                        "Use 'all' or 'none' alone, or list memory filenames."
+                    )
+                filenames = tuple(sorted(set(arguments)))
+                self.workspace.load_memory_context(filenames)
+                self.memory_selections[agent_uid] = filenames
+
+        selection = self.memory_selections.get(agent_uid)
+        if selection is None:
+            label = "all"
+        elif not selection:
+            label = "none"
+        else:
+            label = ", ".join(selection)
+        self.renderer.show_info(f"Memory files for agent '{agent_uid}': {label}.")
+
     def _handle_scratchpad(self, arguments: list[str]) -> None:
-        """Handle scratchpad inspection and mutations."""
+        """Handle scratchpad inspection, selection, and mutations."""
         if not arguments:
             raise ValueError(
                 "Usage: /scratchpad list | /scratchpad show <agent_uid> | "
+                "/scratchpad select-next [@none|@active|<agent_uid> ...] | "
                 "/scratchpad append <agent_uid> | "
                 "/scratchpad append-turn <agent_uid> | "
                 "/scratchpad clear <agent_uid> | /scratchpad clear-all"
@@ -516,6 +552,10 @@ class KonenCLI:
             context = self.workspace.load_scratchpad_context(agent_uid)
             path, content = next(iter(context.items()))
             self.renderer.show_file(path, content)
+            return
+
+        if subcommand == "select-next":
+            self._select_next_scratchpads(arguments[1:])
             return
 
         if subcommand == "append":
@@ -563,10 +603,39 @@ class KonenCLI:
 
         raise ValueError(
             "Usage: /scratchpad list | /scratchpad show <agent_uid> | "
+            "/scratchpad select-next [@none|@active|<agent_uid> ...] | "
             "/scratchpad append <agent_uid> | "
             "/scratchpad append-turn <agent_uid> | "
             "/scratchpad clear <agent_uid> | /scratchpad clear-all"
         )
+
+    def _select_next_scratchpads(self, arguments: list[str]) -> None:
+        """Show or set the next turn's scratchpad selection."""
+        agent_uid = self._require_active_agent()
+
+        if arguments:
+            if arguments == ["@none"]:
+                self.next_scratchpad_uids = ()
+            else:
+                if "@none" in arguments:
+                    raise ValueError("Use '@none' alone or list agent UIDs.")
+                agent_uids = tuple(
+                    sorted(
+                        {agent_uid if uid == "@active" else uid for uid in arguments}
+                    )
+                )
+                for uid in agent_uids:
+                    self.workspace.load_scratchpad_context(uid)
+                self.next_scratchpad_uids = agent_uids
+
+        selection = self.next_scratchpad_uids
+        if selection is None:
+            label = f"{agent_uid} (default)"
+        elif not selection:
+            label = "none"
+        else:
+            label = ", ".join(selection)
+        self.renderer.show_info(f"Scratchpads for next turn: {label}.")
 
     def _handle_history(self, arguments: list[str]) -> None:
         """Handle transcript history inspection commands."""
@@ -738,7 +807,7 @@ class KonenCLI:
             self.orchestrator.interaction_state.provider_history
         )
 
-    def _run_turn(self, user_prompt: str) -> None:
+    def _run_turn(self, user_prompt: str, history_limit: int | None = None) -> None:
         """Execute and render one orchestrator turn."""
         if self.orchestrator.agent_uid is None:
             raise ValueError(
@@ -746,18 +815,37 @@ class KonenCLI:
             )
 
         with self.renderer.console.status("Generating response..."):
-            response = self.orchestrator.run_turn(user_prompt)
+            response = self.orchestrator.run_turn(
+                user_prompt,
+                history_limit=history_limit,
+                memory_filenames=self.memory_selections.get(
+                    self.orchestrator.agent_uid
+                ),
+                scratchpad_agent_uids=self.next_scratchpad_uids,
+            )
 
+        self.next_scratchpad_uids = None
         self.renderer.show_response(orchestrator=self.orchestrator, response=response)
 
     def _select_agent(self, agent_uid: str) -> None:
         """Select one configured agent for subsequent turns."""
         self.orchestrator.ai_team.get_agent(agent_uid)
         self.orchestrator.engine_router.get_engine_uid(agent_uid)
+        if self.orchestrator.agent_uid != agent_uid:
+            self.next_scratchpad_uids = None
         self.orchestrator.agent_uid = agent_uid
         self.renderer.show_agent_selected(
             orchestrator=self.orchestrator, agent_uid=agent_uid
         )
+
+    def _require_active_agent(self) -> str:
+        """Return the active agent UID."""
+        agent_uid = self.orchestrator.agent_uid
+        if agent_uid is None:
+            raise ValueError(
+                "No active agent. Use /agent select <uid> before selecting context."
+            )
+        return agent_uid
 
     def _reload_runtime(self) -> None:
         """Reload runtime configuration and reset provider continuation state."""
